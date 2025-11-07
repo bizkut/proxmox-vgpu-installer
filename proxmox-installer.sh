@@ -291,22 +291,32 @@ download_guest_driver_asset() {
     local target="$dest_dir/$filename"
 
     echo -e "${GREEN}[+]${NC} Downloading ${display_name:-guest driver}"
-
-    if command -v curl >/dev/null 2>&1; then
-        if curl -fSL "$url" -o "$target"; then
-            echo -e "${GREEN}[+]${NC} Saved to $target"
+    if [[ "$url" == https://mega.nz/* ]]; then
+        if ! command -v megadl >/dev/null 2>&1; then
+            echo -e "${RED}[!]${NC} megadl is required to download from Mega.nz. Install megatools or provide an alternate URL."
             return 0
         fi
-    elif command -v wget >/dev/null 2>&1; then
-        if wget -O "$target" "$url"; then
-            echo -e "${GREEN}[+]${NC} Saved to $target"
+
+        if ! megadl "$url"; then
+            echo -e "${RED}[!]${NC} Download failed."
             return 0
         fi
     else
-        echo -e "${RED}[!]${NC} Neither curl nor wget is available to download guest drivers."
-        return 1
-    fi
-
+	    if command -v curl >/dev/null 2>&1; then
+	        if curl -fSL "$url" -o "$target"; then
+	            echo -e "${GREEN}[+]${NC} Saved to $target"
+	            return 0
+	        fi
+	    elif command -v wget >/dev/null 2>&1; then
+	        if wget -O "$target" "$url"; then
+	            echo -e "${GREEN}[+]${NC} Saved to $target"
+	            return 0
+	        fi
+	    else
+	        echo -e "${RED}[!]${NC} Neither curl nor wget is available to download guest drivers."
+	        return 1
+	    fi
+	fi
     echo -e "${RED}[!]${NC} Failed to download ${display_name:-guest driver} from $url"
     rm -f "$target"
     return 1
