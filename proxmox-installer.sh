@@ -1645,10 +1645,10 @@ perform_step_two() {
         install_flags="$install_flags $secure_boot_flags"
     fi
 
-    # Patch and install the driver only if vGPU is not native
-    if [ "$VGPU_SUPPORT" = "Yes" ]; then
+    # Determine if a patch should be applied and install the driver
+    if [ "$VGPU_SUPPORT" = "Yes" ] || { [ "$VGPU_SUPPORT" = "Native" ] && [ "$major_version" = "9" ] && { [ "$driver_version" = "16.9" ] || [ "$driver_version" = "17.5" ]; }; }; then
         if [ -z "$driver_patch" ]; then
-            echo -e "${RED}[!]${NC} Patch metadata missing for driver $driver_filename. Unable to continue unlock-based installation."
+            echo -e "${RED}[!]${NC} Patch metadata missing for driver $driver_filename. Unable to continue with installation."
             exit 1
         fi
         # Add custom to original filename
