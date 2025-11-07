@@ -297,10 +297,12 @@ download_guest_driver_asset() {
             return 0
         fi
 
-        if ! megadl "$url"; then
+        if ! megadl --path "$dest_dir" "$url"; then
             echo -e "${RED}[!]${NC} Download failed."
-            return 0
+            return 1
         fi
+        echo -e "${GREEN}[+]${NC} Saved to $dest_dir"
+        return 0
     else
 	    if command -v curl >/dev/null 2>&1; then
 	        if curl -fSL "$url" -o "$target"; then
