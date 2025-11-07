@@ -1661,7 +1661,7 @@ perform_step_two() {
         echo -e "${GREEN}[+]${NC} Secure Boot signing parameters will be applied during driver installation."
     fi
 
-    if version_ge "$driver_version" "17.6"; then
+    if version_gt "$driver_version" "17.6"; then
         install_flags="--dkms -s"
     else
         install_flags="--dkms -m=kernel -s"
