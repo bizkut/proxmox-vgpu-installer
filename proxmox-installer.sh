@@ -1346,6 +1346,31 @@ print_guest_driver_guidance() {
     esac
 }
 
+should_apply_patch() {
+    local current_kernel
+    current_kernel=$(uname -r | cut -d'-' -f1)
+
+    # Always apply patch for unlocked vGPU
+    if [ "$VGPU_SUPPORT" = "Yes" ]; then
+        return 0
+    fi
+
+    # Apply patch for native vGPU on Proxmox 9 with specific drivers and kernels
+    if [ "$VGPU_SUPPORT" = "Native" ]; then
+        # Kernel 6.12+ for drivers 16.9 and 17.5 on PVE 9+
+        if [ "$major_version" -ge 9 ] && { [ "$driver_version" = "16.9" ] || [ "$driver_version" = "17.5" ]; } && version_ge "$current_kernel" "6.12"; then
+            return 0
+        fi
+
+        # Kernel 6.8+ for drivers 16.7, 16.5, and 17.1
+        if version_ge "$current_kernel" "6.8" && { [ "$driver_version" = "16.7" ] || [ "$driver_version" = "16.5" ] || [ "$driver_version" = "17.1" ]; }; then
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
 print_installation_summary() {
     local branch="$1"
     local driver_filename="$2"
@@ -1646,7 +1671,7 @@ perform_step_two() {
     fi
 
     # Determine if a patch should be applied and install the driver
-    if [ "$VGPU_SUPPORT" = "Yes" ] || { [ "$VGPU_SUPPORT" = "Native" ] && [ "$major_version" = "9" ] && { [ "$driver_version" = "16.9" ] || [ "$driver_version" = "17.5" ]; }; }; then
+    if should_apply_patch; then
         if [ -z "$driver_patch" ]; then
             echo -e "${RED}[!]${NC} Patch metadata missing for driver $driver_filename. Unable to continue with installation."
             exit 1
