@@ -16,6 +16,7 @@ DRIVER_VERSION="${DRIVER_VERSION:-}"
 SCRIPT_VERSION=1.72
 VGPU_DIR="$SCRIPT_DIR"
 VGPU_SUPPORT="${VGPU_SUPPORT:-}"
+GPU_CHIP="${GPU_CHIP:-}"
 VGPU_HELPER_STATUS="${VGPU_HELPER_STATUS:-}"
 SECURE_BOOT_DIR="$SCRIPT_DIR/secure-boot"
 SECURE_BOOT_KEY="$SECURE_BOOT_DIR/module-signing.key"
@@ -1355,6 +1356,11 @@ should_apply_patch() {
         return 0
     fi
 
+    # Force patching for Pascal/older GPUs on driver 17.0+
+    if [[ "$GPU_CHIP" == "Pascal" || "$GPU_CHIP" == "Maxwell" || "$GPU_CHIP" == "Kepler" ]] && version_ge "$driver_version" "17.0"; then
+        return 0
+    fi
+
     # Apply patch for native vGPU on Proxmox 9 with specific drivers and kernels
     if [ "$VGPU_SUPPORT" = "Native" ]; then
         # Kernel 6.12+ for drivers 16.9 and 17.5 on PVE 9+
@@ -1369,6 +1375,47 @@ should_apply_patch() {
     fi
 
     return 1
+}
+
+handle_pascal_vgpu_config() {
+    if [[ "$GPU_CHIP" == "Pascal" || "$GPU_CHIP" == "Maxwell" || "$GPU_CHIP" == "Kepler" ]] && version_ge "$driver_version" "17.0"; then
+        echo -e "${YELLOW}[-]${NC} Pascal/older GPU detected with 17.0+ driver. Replacing vgpuConfig.xml is required."
+
+        local driver_16_url="https://mega.nz/file/wy1WVCaZ#Yq2Pz_UOfydHy8nC_X_nloR4NIFC1iZFHqJN0EiAicU"
+        local driver_16_filename="NVIDIA-Linux-x86_64-535.104.06-vgpu-kvm.run"
+
+        if [ ! -f "$driver_16_filename" ]; then
+            echo -e "${GREEN}[+]${NC} Downloading 16.1 driver to extract vgpuConfig.xml..."
+            download_driver_file "$driver_16_url" "$driver_16_filename"
+        fi
+
+        echo -e "${GREEN}[+]${NC} Extracting 16.1 driver..."
+        chmod +x "$driver_16_filename"
+        ./"$driver_16_filename" -x
+
+        local extracted_dir_name
+        extracted_dir_name=$(basename "$driver_16_filename" .run)
+
+        local config_file_path="$extracted_dir_name/vgpuConfig.xml"
+        if [ -f "$config_file_path" ]; then
+            echo -e "${GREEN}[+]${NC} Replacing vgpuConfig.xml..."
+            cp "$config_file_path" /usr/share/nvidia/vgpu/vgpuConfig.xml
+            echo -e "${GREEN}[+]${NC} vgpuConfig.xml replaced successfully."
+
+            # Clean up extracted files
+            rm -rf "$extracted_dir_name"
+
+            echo -e "${YELLOW}[!]${NC} A reboot is required for the vgpuConfig.xml changes to take effect."
+            read -p "$(echo -e "${BLUE}[?]${NC} Reboot now? (y/n): ")" reboot_choice
+            if [ "$reboot_choice" = "y" ]; then
+                reboot
+            else
+                echo -e "${YELLOW}[-]${NC} Please reboot your system manually to apply the changes."
+            fi
+        else
+            echo -e "${RED}[!]${NC} Could not find vgpuConfig.xml in the extracted 16.1 driver files."
+        fi
+    fi
 }
 
 print_installation_summary() {
@@ -1809,6 +1856,9 @@ perform_step_two() {
 
     rm -f "$CONFIG_FILE"
 
+    # Handle Pascal vgpuConfig.xml replacement
+    handle_pascal_vgpu_config
+
     # Option to license the vGPU
     configure_fastapi_dls
 
@@ -2047,13 +2097,16 @@ case $STEP in
                         echo "$description is vGPU capable through vgpu_unlock with driver version $driver"
                         VGPU_SUPPORT="Yes"
                         DRIVER_VERSION=$driver
+                        GPU_CHIP=$chip
                     elif [[ "$vgpu" == "Native" ]]; then
                         echo "$description supports native vGPU with driver version $driver"
                         VGPU_SUPPORT="Native"
                         DRIVER_VERSION=$driver
+                        GPU_CHIP=$chip
                     else
                         echo "$description of the $chip architecture and vGPU capability is unknown"
                         VGPU_SUPPORT="Unknown"
+                        GPU_CHIP=$chip
                     fi
                 else
                     echo "Device ID: $gpu_device_id not found in the database."
@@ -2341,12 +2394,14 @@ case $STEP in
                 set_config_value "STEP" "2"
                 set_config_value "VGPU_SUPPORT" "$VGPU_SUPPORT"
                 set_config_value "DRIVER_VERSION" "$DRIVER_VERSION"
+                set_config_value "GPU_CHIP" "$GPU_CHIP"
                 reboot
             else
                 echo "Exiting script. Remember to reboot your machine later."
                 set_config_value "STEP" "2"
                 set_config_value "VGPU_SUPPORT" "$VGPU_SUPPORT"
                 set_config_value "DRIVER_VERSION" "$DRIVER_VERSION"
+                set_config_value "GPU_CHIP" "$GPU_CHIP"
                 exit 0
             fi
             ;;
