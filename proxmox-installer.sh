@@ -2245,23 +2245,24 @@ case $STEP in
                 # Check the value of VGPU_SUPPORT
                 if [ "$VGPU_SUPPORT" = "No" ]; then
                     echo -e "${RED}[!]${NC} You don't have a vGPU capable card in your system"
-                    echo "Exiting  script."
+                    echo "Exiting script."
                     exit 1
-                elif [ "$VGPU_SUPPORT" = "Yes" ]; then
-                    # Download vgpu-proxmox
-                    rm -rf $VGPU_DIR/vgpu-proxmox 2>/dev/null 
-                    #echo "downloading vgpu-proxmox"
-                    run_command "Downloading vgpu-proxmox" "info" "git clone https://gitlab.com/polloloco/vgpu-proxmox.git $VGPU_DIR/vgpu-proxmox"
+                fi
 
+                # Download vgpu-proxmox if patching might be required
+                if [ "$VGPU_SUPPORT" = "Yes" ] || [ "$VGPU_SUPPORT" = "Native" ]; then
+                    rm -rf "$VGPU_DIR/vgpu-proxmox" 2>/dev/null
+                    run_command "Downloading vgpu-proxmox" "info" "git clone https://gitlab.com/polloloco/vgpu-proxmox.git $VGPU_DIR/vgpu-proxmox"
+                fi
+
+                if [ "$VGPU_SUPPORT" = "Yes" ]; then
                     # Download vgpu_unlock-rs
                     mkdir -p /opt
                     cd /opt
-                    rm -rf vgpu_unlock-rs 2>/dev/null 
-                    #echo "downloading vgpu_unlock-rs"
+                    rm -rf vgpu_unlock-rs 2>/dev/null
                     run_command "Downloading vgpu_unlock-rs" "info" "git clone https://github.com/mbilker/vgpu_unlock-rs.git"
 
                     # Download and source Rust
-                    #echo "downloading rust"
                     run_command "Downloading Rust" "info" "curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal"
                     if [ -f "$HOME/.cargo/env" ]; then
                         # shellcheck disable=SC1091
@@ -2271,7 +2272,6 @@ case $STEP in
 
                     # Building vgpu_unlock-rs
                     cd vgpu_unlock-rs/
-                    #echo "building vgpu_unlock-rs"
                     run_command "Building vgpu_unlock-rs" "info" "cargo build --release"
                     cd "$VGPU_DIR"
 
@@ -2292,12 +2292,8 @@ case $STEP in
                     # Systemctl
                     run_command "Systemctl daemon-reload" "info" "systemctl daemon-reload"
                     echo -e "${YELLOW}[-]${NC} NVIDIA services will be enabled after the driver installation completes."
-                    update_grub
-
-                elif [ "$VGPU_SUPPORT" = "Native" ]; then
-                    # Execute steps for "Native" VGPU_SUPPORT
-                    update_grub
                 fi
+                update_grub
             # Removing previous installations of vgpu
             elif [ "$choice" -eq 2 ]; then
                 #echo "removing nvidia driver"
